@@ -1,4 +1,4 @@
-import { he } from '../i18n/he';
+import { ltr } from '../utils/he';
 import { AgentConfig, BackendPrinter, JobStatus, PrintJob } from '../types';
 
 export class ApiError extends Error {
@@ -39,7 +39,7 @@ async function request<T>(
       signal: controller.signal,
     });
   } catch {
-    throw new ApiError(he.errors.cannotConnect, 0);
+    throw new ApiError('לא ניתן להתחבר לשרת. בדקו את הכתובת ואת החיבור לרשת.', 0);
   } finally {
     clearTimeout(timer);
   }
@@ -54,8 +54,8 @@ async function request<T>(
   if (!response.ok) {
     const message =
       response.status === 401 || response.status === 403
-        ? he.errors.badKey
-        : he.errors.server(response.status, data?.message);
+        ? 'מפתח הסוכן שגוי או שבוטל.'
+        : `השרת החזיר שגיאה (${ltr(response.status)})${data?.message ? `: ${data?.message}` : ''}`;
     throw new ApiError(message, response.status);
   }
   return data as T;

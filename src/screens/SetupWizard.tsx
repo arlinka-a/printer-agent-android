@@ -1,14 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { BackHandler, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { BackHandler, ScrollView, Text, View } from 'react-native';
 import { syncPrinters } from '../agent/agent';
 import { api } from '../api/client';
 import { isConfigUsable } from '../config/storage';
 import { discoverPrinters } from '../printers/discovery';
 import { probe } from '../printers/transport';
-import { he, ltr } from '../i18n/he';
+import { ltr } from '../utils/he';
 import { AgentConfig, LocalPrinter } from '../types';
 import { Button, Card, Field, Notice, Pill, Tone } from '../ui/components';
-import { useTheme } from '../ui/theme';
+import { setupStyle, useTheme } from '../ui/theme';
+import { isEmpty } from 'lodash';
 
 type ConfigPatch = Partial<AgentConfig> | ((prev: AgentConfig) => Partial<AgentConfig>);
 type Msg = { text: string; tone: Tone } | null;
@@ -21,6 +22,8 @@ type Props = {
   /** Present when setup was already completed once, so the user can back out to the dashboard. */
   onCancel?: () => void;
 }
+
+const steps = ['חיבור', 'מדפסות', 'אימות']
 
 export const SetupWizard = ({ config, update, updatePrinter, onDone, onCancel }: Props) => {
   const theme = useTheme();
@@ -56,7 +59,7 @@ export const SetupWizard = ({ config, update, updatePrinter, onDone, onCancel }:
     setMsg(null);
     try {
       await api.activePrinters(config);
-      setMsg({ text: he.wizard.connected, tone: 'success' });
+      setMsg({ text: 'מחובר — השרת אישר את מפתח הזיהוי.', tone: 'success' });
     } catch (e) {
       fail(e);
     } finally {
@@ -74,9 +77,9 @@ export const SetupWizard = ({ config, update, updatePrinter, onDone, onCancel }:
         return { printers: found.map((p) => known.get(p.ip) ?? p) };
       });
       setMsg(
-        found.length
-          ? { text: he.wizard.found(found.length), tone: 'success' }
-          : { text: he.wizard.noneFound, tone: 'warn' },
+        !isEmpty(found)
+          ? { text: (found.length === 1 ? 'נמצאה מדפסת אחת.' : `נמצאו ${found.length} מדפסות.`), tone: 'success' }
+          : { text: 'לא נמצאו מדפסות. ודאו שהטלפון מחובר לאותה רשת Wi-Fi כמו המדפסות.', tone: 'warn' },
       );
     } catch (e) {
       fail(e);
@@ -100,29 +103,29 @@ export const SetupWizard = ({ config, update, updatePrinter, onDone, onCancel }:
   };
 
   const verify = async (index: number) => {
-    const p = config.printers[index];
+    const printer = config.printers[index];
     setVerifying(index);
-    const ok = await probe(p.ip, p.port, 1500);
+    const ok = await probe(printer.ip, printer.port, 1500);
     setVerifying(null);
     updatePrinter(index, { staticIpConfirmed: ok });
-    setMsg(ok ? null : { text: he.wizard.noAnswer(p.name, `${p.ip}:${p.port}`), tone: 'danger' });
+    setMsg(ok ? null : { text: `${printer.name} לא ענתה בכתובת ${ltr(`${printer.ip}:${printer.port}`)}.`, tone: 'danger' });
   };
 
   const scanning = busy.includes('/');
   const muted = { color: theme.textMuted };
 
   return (
-    <View style={s.flex}>
-      <View style={s.header}>
-        <View style={s.spread}>
-          <Text style={[s.title, { color: theme.text }]}>{he.wizard.title}</Text>
-          {onCancel && <Button label={he.wizard.close} variant="ghost" onPress={onCancel} style={s.compactBtn} />}
+    <View style={setupStyle.flex}>
+      <View style={setupStyle.header}>
+        <View style={setupStyle.spread}>
+          <Text style={[setupStyle.title, { color: theme.text }]}>הגדרה</Text>
+          {onCancel && <Button label={'סגירה'} variant="ghost" onPress={onCancel} style={setupStyle.compactBtn} />}
         </View>
-        <View style={s.steps}>
-          {he.wizard.steps.map((label, i) => (
-            <View key={label} style={s.step}>
-              <View style={[s.stepBar, { backgroundColor: i <= step ? theme.primary : theme.border }]} />
-              <Text style={[s.stepLabel, i === step ? [s.stepLabelActive, { color: theme.text }] : muted]}>
+        <View style={setupStyle.steps}>
+          {steps.map((label, i) => (
+            <View key={label} style={setupStyle.step}>
+              <View style={[setupStyle.stepBar, { backgroundColor: i <= step ? theme.primary : theme.border }]} />
+              <Text style={[setupStyle.stepLabel, i === step ? [setupStyle.stepLabelActive, { color: theme.text }] : muted]}>
                 {i + 1}. {label}
               </Text>
             </View>
@@ -130,16 +133,16 @@ export const SetupWizard = ({ config, update, updatePrinter, onDone, onCancel }:
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={s.body} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={setupStyle.body} keyboardShouldPersistTaps="handled">
         {step === 0 && (
           <>
-            <Text style={[s.intro, muted]}>{he.wizard.connectIntro}</Text>
+            <Text style={[setupStyle.intro, muted]}>{'חברו את המכשיר לשרת ההדפסה. את מפתח הסוכן אפשר למצוא בלוח הניהול של השרת.'}</Text>
             <Card>
-              <Field label={he.wizard.serverUrl} onChangeText={(v) => update({ baseUrl: v })} keyboardType="url" ltr />
-              <Field label={he.wizard.agentKey} onChangeText={(v) => update({ agentToken: v })}
+              <Field label={'כתובת המערכת'} onChangeText={(v) => update({ baseUrl: v })} keyboardType="url" ltr />
+              <Field label={'מפתח זיהוי'} onChangeText={(v) => update({ agentToken: v })}
                 placeholder="pa_..." secureTextEntry ltr />
-              <Field label={he.wizard.tenant} onChangeText={(v) => update({ tenantId: v })} />
-              <Button label={he.wizard.testConnection} variant="secondary" onPress={testConnection}
+              <Field label={'שם העסק'} onChangeText={(v) => update({ tenantId: v })} />
+              <Button label={busy === 'test' ? 'מתחבר למערכת' : 'התחבר'} variant="secondary" onPress={testConnection}
                 loading={busy === 'test'} disabled={!isConfigUsable(config)} />
             </Card>
           </>
@@ -147,34 +150,34 @@ export const SetupWizard = ({ config, update, updatePrinter, onDone, onCancel }:
 
         {step === 1 && (
           <>
-            <Text style={[s.intro, muted]}>{he.wizard.printersIntro}</Text>
-            <Button label={scanning ? he.wizard.scanning(busy) : config.printers.length ? he.wizard.scanAgain : he.wizard.scan}
+            <Text style={[setupStyle.intro, muted]}>{'חיפוש מדפסות רשת ב-Wi-Fi הזה (פורט 9100). תנו לכל מדפסת שם שתזהו.'}</Text>
+            <Button label={scanning ? `סורק ${ltr(busy)}` : config.printers.length ? 'סריקה חוזרת' : 'סריקת הרשת'}
               variant="secondary" onPress={scan} loading={scanning} disabled={!!busy && !scanning} />
             {config.printers.map((p, i) => (
               <Card key={p.ip}>
                 <Field label={ltr(p.ip)} value={p.name} onChangeText={(v) => updatePrinter(i, { name: v })} />
               </Card>
             ))}
-            {!config.printers.length && !scanning && !msg && <Text style={[s.empty, muted]}>{he.wizard.noPrintersYet}</Text>}
+            {!config.printers.length && !scanning && !msg && <Text style={[setupStyle.empty, muted]}>{'עדיין אין מדפסות.'}</Text>}
           </>
         )}
 
         {step === 2 && (
           <>
-            <Text style={[s.intro, muted]}>{he.wizard.verifyIntro}</Text>
+            <Text style={[setupStyle.intro, muted]}>{'הגדירו כתובת IP קבועה לכל מדפסת בנתב, ואז בדקו שהיא עונה בכתובת הזו.'}</Text>
             {config.printers.map((p, i) => (
               <Card key={`ip-${i}`}>
-                <View style={s.spread}>
-                  <Text style={[s.printerName, { color: theme.text }]}>{p.name}</Text>
-                  <Pill label={p.staticIpConfirmed ? he.common.verified : he.common.notVerified}
+                <View style={setupStyle.spread}>
+                  <Text style={[setupStyle.printerName, { color: theme.text }]}>{p.name}</Text>
+                  <Pill label={p.staticIpConfirmed ? 'אומתה' : 'לא אומתה'}
                     tone={p.staticIpConfirmed ? 'success' : 'neutral'} />
                 </View>
-                <View style={s.ipRow}>
-                  <View style={s.flex}>
-                    <Field label={he.wizard.ipAddress} value={p.ip} keyboardType="numeric" ltr
+                <View style={setupStyle.ipRow}>
+                  <View style={setupStyle.flex}>
+                    <Field label={'כתובת IP'} value={p.ip} keyboardType="numeric" ltr
                       onChangeText={(v) => updatePrinter(i, { ip: v, staticIpConfirmed: false })} />
                   </View>
-                  <Button label={he.wizard.verify} variant="secondary" onPress={() => verify(i)} loading={verifying === i} />
+                  <Button label={'אימות'} variant="secondary" onPress={() => verify(i)} loading={verifying === i} />
                 </View>
               </Card>
             ))}
@@ -184,35 +187,15 @@ export const SetupWizard = ({ config, update, updatePrinter, onDone, onCancel }:
         {msg && <Notice text={msg.text} tone={msg.tone} />}
       </ScrollView>
 
-      <View style={[s.footer, { borderTopColor: theme.border, backgroundColor: theme.card }]}>
-        {step > 0 && <Button label={he.wizard.back} variant="secondary" onPress={() => go(step - 1)} style={s.flex} />}
-        {step === 0 && <Button label={he.wizard.next} onPress={() => go(1)} disabled={!isConfigUsable(config)} style={s.primary} />}
+      <View style={[setupStyle.footer, { borderTopColor: theme.border, backgroundColor: theme.card }]}>
+        {step > 0 && <Button label={'חזרה'} variant="secondary" onPress={() => go(step - 1)} style={setupStyle.flex} />}
+        {step === 0 && <Button label={'הבא'} onPress={() => go(1)} disabled={!isConfigUsable(config)} style={setupStyle.primary} />}
         {step === 1 && (
-          <Button label={he.wizard.saveAndContinue} onPress={saveAndContinue} loading={busy === 'sync'}
-            disabled={!config.printers.length || !!busy} style={s.primary} />
+          <Button label={'שמירה והמשך'} onPress={saveAndContinue} loading={busy === 'sync'}
+            disabled={isEmpty(config.printers) || !!busy} style={setupStyle.primary} />
         )}
-        {step === 2 && <Button label={he.wizard.finish} onPress={onDone} style={s.primary} />}
+        {step === 2 && <Button label={'סיום'} onPress={onDone} style={setupStyle.primary} />}
       </View>
     </View>
   );
 }
-
-const s = StyleSheet.create({
-  flex: { flex: 1 },
-  primary: { flex: 2 },
-  header: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 8, gap: 14 },
-  spread: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  title: { fontSize: 24, fontWeight: '700' },
-  compactBtn: { paddingVertical: 6 },
-  steps: { flexDirection: 'row', gap: 8 },
-  step: { flex: 1, gap: 6 },
-  stepBar: { height: 4, borderRadius: 2 },
-  stepLabel: { fontSize: 12 },
-  stepLabelActive: { fontWeight: '600' },
-  body: { padding: 20, gap: 16 },
-  intro: { fontSize: 15 },
-  empty: { textAlign: 'center', paddingVertical: 24 },
-  printerName: { fontSize: 16, fontWeight: '600' },
-  ipRow: { flexDirection: 'row', gap: 10, alignItems: 'flex-end' },
-  footer: { flexDirection: 'row', gap: 12, padding: 20, borderTopWidth: 1 },
-});

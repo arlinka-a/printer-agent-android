@@ -1,5 +1,5 @@
 import { AgentConfig, PrintJob } from '../types';
-import { he } from '../i18n/he';
+import { ltr } from '../utils/he';
 import { api, authHeaders } from './client';
 
 // RN's fetch cannot stream a body, but XHR with an onprogress handler gets incremental
@@ -58,7 +58,7 @@ export function startJobStream(
       if (!connected) {
         connected = true;
         backoffMs = 1000;
-        log(he.log.liveConnected);
+        log('עדכונים חיים מחוברים');
       }
       lastFrameAt = Date.now();
       buffer += xhr.responseText.slice(consumed);
@@ -85,7 +85,7 @@ export function startJobStream(
       if (stopped) {
         return;
       }
-      log(he.log.liveDown(status, backoffMs));
+      log(`עדכונים חיים נותקו${status ? ` (קוד ${ltr(status)})` : ''}. ניסיון חוזר בעוד ${Math.round(backoffMs / 1000)} שניות`);
       retryTimer = setTimeout(connect, backoffMs);
       backoffMs = Math.min(backoffMs * 2, 30_000);
     };

@@ -1,6 +1,6 @@
 import TcpSocket from 'react-native-tcp-socket';
 import { Buffer } from 'buffer';
-import { he } from '../i18n/he';
+import { ltr } from '../utils/he';
 
 /**
  * Sends raw bytes to a network printer (JetDirect / port 9100). Resolves once the bytes are
@@ -20,7 +20,7 @@ export function sendRaw(ip: string, port: number, data: Uint8Array, timeoutMs = 
       error ? reject(error) : resolve();
     };
 
-    const timer = setTimeout(() => finish(new Error(he.errors.printerTimeout(`${ip}:${port}`))), timeoutMs);
+    const timer = setTimeout(() => finish(new Error(`המדפסת ${ltr(`${ip}:${port}`)} לא הגיבה בזמן.`)), timeoutMs);
     const socket = TcpSocket.createConnection({ host: ip, port }, () => {
       socket.write(Buffer.from(data), undefined, (err) => {
         if (err) {

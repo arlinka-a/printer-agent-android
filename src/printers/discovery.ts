@@ -1,6 +1,5 @@
 import NetInfo from '@react-native-community/netinfo';
 import { LocalPrinter } from '../types';
-import { he } from '../i18n/he';
 import { probe } from './transport';
 
 export const RAW_PRINT_PORT = 9100;
@@ -21,7 +20,7 @@ export async function discoverPrinters(
 ): Promise<LocalPrinter[]> {
   const ip = await getWifiIpv4();
   if (!ip) {
-    throw new Error(he.errors.noWifi);
+    throw new Error('הטלפון לא מחובר ל-Wi-Fi.');
   }
   const prefix = ip.split('.').slice(0, 3).join('.');
   const hosts = Array.from({ length: 254 }, (_, i) => `${prefix}.${i + 1}`).filter((h) => h !== ip);
@@ -33,7 +32,7 @@ export async function discoverPrinters(
     results.forEach((ok, j) => {
       if (ok) {
         found.push({
-          name: he.defaultPrinterName(batch[j].split('.')[3]),
+          name: `מדפסת-${batch[j].split('.')[3]}`,
           ip: batch[j],
           port: RAW_PRINT_PORT,
           staticIpConfirmed: false,

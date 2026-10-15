@@ -1,6 +1,6 @@
 import { api, ApiError } from '../api/client';
 import { SseHandle, startJobStream } from '../api/sse';
-import { he, timeStamp } from '../i18n/he';
+import { ltr, timeStamp } from '../utils/he';
 import { buildDrawerKick, buildTextReceipt, CASH_DRAWER_COMMAND } from '../printers/escpos';
 import { sendRaw } from '../printers/transport';
 import { AgentConfig, LocalPrinter, PrintJob } from '../types';
@@ -67,8 +67,8 @@ export class PrintAgent {
       },
       this.log,
     );
-    this.loop().catch((e) => this.log(he.log.agentCrashed(e)));
-    this.log(he.log.agentStarted);
+    this.loop().catch((e) => this.log(`הסוכן קרס: ${e}`));
+    this.log('הסוכן הופעל');
   }
 
   stop() {
@@ -76,7 +76,7 @@ export class PrintAgent {
     this.sse?.stop();
     this.sse = null;
     this.requestWake();
-    this.log(he.log.agentStopped);
+    this.log('הסוכן נעצר');
   }
 
   private requestWake() {
@@ -120,7 +120,7 @@ export class PrintAgent {
       } catch (error) {
         this.status.backendConnected = false;
         this.status.lastError = (error as Error).message;
-        this.log(he.log.pollFailed(this.status.lastError));
+        this.log(`בדיקת התור נכשלה: ${this.status.lastError}`);
         waitMs = ERROR_BACKOFF_MS;
       }
       this.emit();
@@ -140,7 +140,7 @@ export class PrintAgent {
       }
       const printer = this.resolvePrinter(job);
       if (!printer) {
-        await this.reportFailed(job, he.errors.noLocalPrinter(job.printerName));
+        await this.reportFailed(job, `אין מדפסת מקומית שמשויכת ל-'${job.printerName}'`);
         continue;
       }
       this.enqueue(printer, job);
@@ -169,10 +169,10 @@ export class PrintAgent {
       await api.setJobStatus(this.config, job.id, 'claimed');
     } catch (error) {
       if (error instanceof ApiError && error.status === 409) {
-        this.log(he.log.alreadyClaimed(job.id));
+        this.log(`עבודה ${ltr(`#${job.id}`)} כבר נלקחה על ידי סוכן אחר`);
         return;
       }
-      this.log(he.log.claimFailed(job.id, (error as Error).message));
+      this.log(`לקיחת עבודה ${ltr(`#${job.id}`)} נכשלה: ${(error as Error).message}`);
       return;
     }
 
@@ -182,7 +182,7 @@ export class PrintAgent {
       await sendRaw(printer.ip, printer.port, payload);
       await api.setJobStatus(this.config, job.id, 'printed');
       this.status.printed++;
-      this.log(he.log.printed(job.id, printer.name, printer.ip, Date.now() - started));
+      this.log(`עבודה ${ltr(`#${job.id}`)} הודפסה ב-${printer.name} (${ltr(printer.ip)}) תוך ${ltr(`${Date.now() - started}ms`)}`);
     } catch (error) {
       await this.reportFailed(job, (error as Error).message);
     }
@@ -190,11 +190,11 @@ export class PrintAgent {
 
   private async reportFailed(job: PrintJob, reason: string) {
     this.status.failed++;
-    this.log(he.log.jobFailed(job.id, reason));
+    this.log(`עבודה ${ltr(`#${job.id}`)} נכשלה: ${reason}`);
     try {
       await api.setJobStatus(this.config, job.id, 'failed', reason);
     } catch (error) {
-      this.log(he.log.reportFailed(job.id, (error as Error).message));
+      this.log(`לא ניתן לדווח על כישלון עבודה ${ltr(`#${job.id}`)}: ${(error as Error).message}`);
     }
   }
 }

@@ -1,12 +1,13 @@
 import React from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 import { AgentStatus } from '../agent/agent';
-import { he, ltr } from '../i18n/he';
+import { ltr } from '../utils/he';
 import { AgentConfig } from '../types';
 import { Button, Card, Dot, Pill, SectionTitle } from '../ui/components';
-import { radius, useTheme } from '../ui/theme';
+import { dashboardStyle, useTheme } from '../ui/theme';
+import { isEmpty } from 'lodash';
 
-interface Props {
+type Props = {
   config: AgentConfig;
   status: AgentStatus | null;
   log: string[];
@@ -17,103 +18,86 @@ interface Props {
 
 const VISIBLE_LOG_LINES = 20;
 
-function hostOf(url: string) {
+const hostOf = (url: string) => {
   return url.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
 }
 
-export function Dashboard({ config, status, log, canStart, onToggleAgent, onOpenSettings }: Props) {
-  const t = useTheme();
-  const running = !!status?.running;
-  const healthy = running && !!status?.backendConnected;
+export const Dashboard = ({ config, status, log, canStart, onToggleAgent, onOpenSettings }: Props) => {
+  const theme = useTheme();
+  const isRunning = !!status?.running;
+  const isHealthy = isRunning && !!status?.backendConnected;
 
-  const headline = !running ? he.dashboard.stopped : healthy ? he.dashboard.running : he.dashboard.connecting;
-  const tone = !running ? 'neutral' : healthy ? 'success' : 'warn';
-  const muted = { color: t.textMuted };
+  const headline = !isRunning ? 'כבוי' : isHealthy ? 'פועל' : 'מתחבר…';
+  const tone = !isRunning ? 'neutral' : isHealthy ? 'success' : 'warn';
+  const muted = { color: theme.textMuted };
 
   return (
-    <ScrollView contentContainerStyle={s.body}>
-      <View style={s.spread}>
-        <View style={s.shrink}>
-          <Text style={[s.title, { color: t.text }]}>{he.dashboard.title}</Text>
-          <Text style={[s.small, muted]} numberOfLines={1}>
+    <ScrollView contentContainerStyle={dashboardStyle.body}>
+      <View style={dashboardStyle.spread}>
+        <View style={dashboardStyle.shrink}>
+          <Text style={[dashboardStyle.title, { color: theme.text }]}>{'סוכן הדפסה'}</Text>
+          <Text style={[dashboardStyle.small, muted]} numberOfLines={1}>
             {config.tenantId} · {ltr(hostOf(config.baseUrl))}
           </Text>
         </View>
-        <Button label={he.dashboard.settings} variant="ghost" onPress={onOpenSettings} style={s.compactBtn} />
+        <Button label={'הגדרות'} variant="ghost" onPress={onOpenSettings} style={dashboardStyle.compactBtn} />
       </View>
 
       <Card>
-        <View style={s.row}>
+        <View style={dashboardStyle.row}>
           <Dot tone={tone} />
-          <Text style={[s.headline, { color: t.text }]}>{headline}</Text>
+          <Text style={[dashboardStyle.headline, { color: theme.text }]}>{headline}</Text>
         </View>
         {status?.running && (
-          <Text style={[s.body14, muted]}>
-            {status.backendConnected ? he.dashboard.serverConnected : he.dashboard.serverNotConnected} ·{' '}
-            {status.sseHealthy ? he.dashboard.liveOn : he.dashboard.liveOff}
+          <Text style={[dashboardStyle.body14, muted]}>
+            {status.backendConnected ? 'מחובר לשרת' : 'לא מחובר לשרת'} ·{' '}
+            {status.sseHealthy ? 'עדכונים חיים פעילים' : 'עדכונים חיים כבויים'}
           </Text>
         )}
         {status?.running && !!status.lastError && (
-          <Text style={[s.small, { color: t.danger }]}>{status.lastError}</Text>
+          <Text style={[dashboardStyle.small, { color: theme.danger }]}>{status.lastError}</Text>
         )}
-        <View style={s.stats}>
-          <Stat label={he.dashboard.printed} value={status?.printed ?? 0} />
-          <Stat label={he.dashboard.failed} value={status?.failed ?? 0} danger={!!status?.failed} />
+        <View style={dashboardStyle.stats}>
+          <Stat label={'הודפסו'} value={status?.printed ?? 0} />
+          <Stat label={'נכשלו'} value={status?.failed ?? 0} danger={!!status?.failed} />
         </View>
-        <Button label={running ? he.dashboard.stop : he.dashboard.start} variant={running ? 'secondary' : 'primary'}
-          onPress={onToggleAgent} disabled={!running && !canStart} />
+        <Button label={isRunning ? 'עצירת הסוכן' : 'הפעלת הסוכן'} variant={isRunning ? 'secondary' : 'primary'}
+          onPress={onToggleAgent} disabled={!isRunning && !canStart} />
       </Card>
 
       <Card>
-        <SectionTitle title={he.dashboard.printers} right={<Text style={muted}>{config.printers.length}</Text>} />
-        {config.printers.map((p, i) => (
-          <View key={p.ip} style={[s.spread, i > 0 && [s.divided, { borderTopColor: t.border }]]}>
+        <SectionTitle title={'מדפסות'} right={<Text style={muted}>{config.printers.length}</Text>} />
+        {config.printers.map((printer, i) => (
+          <View key={printer.ip} style={[dashboardStyle.spread, i > 0 && [dashboardStyle.divided, { borderTopColor: theme.border }]]}>
             <View>
-              <Text style={[s.printerName, { color: t.text }]}>{p.name}</Text>
-              <Text style={[s.small, muted]}>{ltr(`${p.ip}:${p.port}`)}</Text>
+              <Text style={[dashboardStyle.printerName, { color: theme.text }]}>{printer.name}</Text>
+              <Text style={[dashboardStyle.small, muted]}>{ltr(`${printer.ip}:${printer.port}`)}</Text>
             </View>
-            <Pill label={p.staticIpConfirmed ? he.common.verified : he.common.notVerified} tone={p.staticIpConfirmed ? 'success' : 'warn'} />
+            <Pill label={printer.staticIpConfirmed ? 'אומתה' : 'לא אומתה'} tone={printer.staticIpConfirmed ? 'success' : 'warn'} />
           </View>
         ))}
-        {!config.printers.length && <Text style={muted}>{he.dashboard.noPrinters}</Text>}
+        {isEmpty(config.printers) && <Text style={muted}>{'לא הוגדרו מדפסות.'}</Text>}
       </Card>
 
       <Card>
-        <SectionTitle title={he.dashboard.activity} />
+        <SectionTitle title={'פעילות'} />
         {log.length ? (
-          log.slice(0, VISIBLE_LOG_LINES).map((line, i) => <Text key={i} style={[s.logLine, muted]}>{line}</Text>)
+          log.slice(0, VISIBLE_LOG_LINES).map((line, i) => <Text key={i} style={[dashboardStyle.logLine, muted]}>{line}</Text>)
         ) : (
-          <Text style={muted}>{he.dashboard.noActivity}</Text>
+          <Text style={muted}>{'אין פעילות עדיין.'}</Text>
         )}
       </Card>
     </ScrollView>
   );
 }
 
-function Stat({ label, value, danger }: { label: string; value: number; danger?: boolean }) {
-  const t = useTheme();
+type StatProps = { label: string; value: number; danger?: boolean };
+const Stat = ({ label, value, danger }: StatProps) => {
+  const theme = useTheme();
   return (
-    <View style={[s.stat, { backgroundColor: t.neutralSoft }]}>
-      <Text style={[s.statValue, { color: danger ? t.danger : t.text }]}>{value}</Text>
-      <Text style={[s.small, { color: t.textMuted }]}>{label}</Text>
+    <View style={[dashboardStyle.stat, { backgroundColor: theme.neutralSoft }]}>
+      <Text style={[dashboardStyle.statValue, { color: danger ? theme.danger : theme.text }]}>{value}</Text>
+      <Text style={[dashboardStyle.small, { color: theme.textMuted }]}>{label}</Text>
     </View>
   );
 }
-
-const s = StyleSheet.create({
-  body: { padding: 20, gap: 16 },
-  spread: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  shrink: { flexShrink: 1 },
-  title: { fontSize: 24, fontWeight: '700' },
-  small: { fontSize: 13 },
-  body14: { fontSize: 14 },
-  compactBtn: { paddingVertical: 6 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  headline: { fontSize: 20, fontWeight: '700' },
-  stats: { flexDirection: 'row', gap: 12 },
-  stat: { flex: 1, borderRadius: radius.md, padding: 12 },
-  statValue: { fontSize: 22, fontWeight: '700' },
-  printerName: { fontSize: 15, fontWeight: '500' },
-  divided: { paddingTop: 12, borderTopWidth: 1 },
-  logLine: { fontSize: 13, fontFamily: 'monospace' },
-});

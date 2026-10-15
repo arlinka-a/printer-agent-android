@@ -75,3 +75,41 @@ export const s = StyleSheet.create({
   noticeText: { fontSize: 14 },
   dot: { width: 10, height: 10, borderRadius: 5 },
 });
+
+export const setupStyle = StyleSheet.create({
+  flex: { flex: 1 },
+  primary: { flex: 2 },
+  header: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 8, gap: 14 },
+  spread: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  title: { fontSize: 24, fontWeight: '700' },
+  compactBtn: { paddingVertical: 6 },
+  steps: { flexDirection: 'row', gap: 8 },
+  step: { flex: 1, gap: 6 },
+  stepBar: { height: 4, borderRadius: 2 },
+  stepLabel: { fontSize: 12 },
+  stepLabelActive: { fontWeight: '600' },
+  body: { padding: 20, gap: 16 },
+  intro: { fontSize: 15 },
+  empty: { textAlign: 'center', paddingVertical: 24 },
+  printerName: { fontSize: 16, fontWeight: '600' },
+  ipRow: { flexDirection: 'row', gap: 10, alignItems: 'flex-end' },
+  footer: { flexDirection: 'row', gap: 12, padding: 20, borderTopWidth: 1 },
+});
+
+export const dashboardStyle = StyleSheet.create({
+  body: { padding: 20, gap: 16 },
+  spread: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  shrink: { flexShrink: 1 },
+  title: { fontSize: 24, fontWeight: '700' },
+  small: { fontSize: 13 },
+  body14: { fontSize: 14 },
+  compactBtn: { paddingVertical: 6 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  headline: { fontSize: 20, fontWeight: '700' },
+  stats: { flexDirection: 'row', gap: 12 },
+  stat: { flex: 1, borderRadius: radius.md, padding: 12 },
+  statValue: { fontSize: 22, fontWeight: '700' },
+  printerName: { fontSize: 15, fontWeight: '500' },
+  divided: { paddingTop: 12, borderTopWidth: 1 },
+  logLine: { fontSize: 13, fontFamily: 'monospace' },
+});

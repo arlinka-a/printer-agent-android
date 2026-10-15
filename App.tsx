@@ -5,7 +5,7 @@ import { AgentStatus, PrintAgent } from './src/agent/agent';
 import { isConfigUsable, loadConfig, saveConfig } from './src/config/storage';
 import { Dashboard } from './src/screens/Dashboard';
 import { SetupWizard } from './src/screens/SetupWizard';
-import { AgentConfig, emptyConfig, LocalPrinter } from './src/types';
+import { AgentConfig, emptyConfig } from './src/types';
 import { useTheme } from './src/ui/theme';
 
 type Screen = 'loading' | 'setup' | 'dashboard';
@@ -35,9 +35,6 @@ export default function App() {
       saveConfig(next).catch(() => {});
       return next;
     });
-
-  const updatePrinter = (index: number, patch: Partial<LocalPrinter>) =>
-    update((prev) => ({ printers: prev.printers.map((p, i) => (i === index ? { ...p, ...patch } : p)) }));
 
   const stopAgent = () => {
     agentRef.current?.stop();
@@ -80,7 +77,6 @@ export default function App() {
           <SetupWizard
             config={config}
             update={update}
-            updatePrinter={updatePrinter}
             onDone={() => setScreen('dashboard')}
             onCancel={isSetUp(config) ? () => setScreen('dashboard') : undefined}
           />

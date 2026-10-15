@@ -71,7 +71,9 @@ export const Dashboard = ({ config, status, log, canStart, onToggleAgent, onOpen
           <View key={printer.ip} style={[dashboardStyle.spread, i > 0 && [dashboardStyle.divided, { borderTopColor: theme.border }]]}>
             <View>
               <Text style={[dashboardStyle.printerName, { color: theme.text }]}>{printer.name}</Text>
-              <Text style={[dashboardStyle.small, muted]}>{ltr(`${printer.ip}:${printer.port}`)}</Text>
+              <Text style={[dashboardStyle.small, muted]}>
+                {printer.model ? `${ltr(printer.model)} · ` : ''}{ltr(`${printer.ip}:${printer.port}`)}
+              </Text>
             </View>
             <Pill label={printer.staticIpConfirmed ? 'אומתה' : 'לא אומתה'} tone={printer.staticIpConfirmed ? 'success' : 'warn'} />
           </View>

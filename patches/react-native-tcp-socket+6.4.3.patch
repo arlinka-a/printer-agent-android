@@ -1,0 +1,13 @@
+diff --git a/node_modules/react-native-tcp-socket/android/src/main/java/com/asterinet/react/tcpsocket/TcpSocketModule.java b/node_modules/react-native-tcp-socket/android/src/main/java/com/asterinet/react/tcpsocket/TcpSocketModule.java
+index 121edb4..9d2d700 100644
+--- a/node_modules/react-native-tcp-socket/android/src/main/java/com/asterinet/react/tcpsocket/TcpSocketModule.java
++++ b/node_modules/react-native-tcp-socket/android/src/main/java/com/asterinet/react/tcpsocket/TcpSocketModule.java
+@@ -43,7 +43,7 @@ import java.util.concurrent.TimeUnit;
+ 
+ public class TcpSocketModule extends ReactContextBaseJavaModule {
+     public static final String TAG = "TcpSockets";
+-    private static final int N_THREADS = 2;
++    private static final int N_THREADS = 64;
+     private final ReactApplicationContext mReactContext;
+     private final ConcurrentHashMap<Integer, TcpSocket> socketMap = new ConcurrentHashMap<>();
+     private final ConcurrentHashMap<Integer, ReadableMap> pendingTLS = new ConcurrentHashMap<>();

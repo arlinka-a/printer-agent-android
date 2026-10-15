@@ -1,6 +1,6 @@
 import NetInfo from '@react-native-community/netinfo';
 import { LocalPrinter } from '../types';
-import { probe } from './transport';
+import { probe, queryModel } from './transport';
 
 export const RAW_PRINT_PORT = 9100;
 
@@ -40,6 +40,9 @@ export async function discoverPrinters(
       }
     });
     onProgress?.(Math.min(i + batchSize, hosts.length), hosts.length);
+  }
+  for (const printer of found) {
+    printer.model = await queryModel(printer.ip, printer.port);
   }
   return found;
 }

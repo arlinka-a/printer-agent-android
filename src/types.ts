@@ -33,6 +33,8 @@ export type LocalPrinter = {
   name: string;
   ip: string;
   port: number;
+  /** Manufacturer and model as the printer reports them (ESC/POS GS I); null if it didn't answer. */
+  model?: string | null;
   /** Set once the user pins the printer to a static IP and confirms it answers there. */
   staticIpConfirmed: boolean;
 }

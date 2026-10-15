@@ -1,12 +1,14 @@
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, BackHandler, Linking, Pressable, ScrollView, Text, ToastAndroid, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, AppState, Linking, Pressable, ScrollView, Text, ToastAndroid, View } from 'react-native';
 import { syncPrinters } from '../agent/agent';
 import { api, normalizeBaseUrl } from '../api/client';
 import { isConfigUsable } from '../config/storage';
 import { discoverPrinters } from '../printers/discovery';
-import { ltr } from '../utils/he';
-import { AgentConfig, LocalPrinter } from '../types';
-import { Button, Card, Field, Notice, SectionTitle, Tone } from '../ui/components';
+import { buildTextReceipt } from '../printers/escpos';
+import { sendRaw } from '../printers/transport';
+import { ltr, timeStamp } from '../utils/he';
+import { AgentConfig, LocalPrinter, StaticIpStatus } from '../types';
+import { Button, Card, Field, Notice, SectionTitle, StaticIpTag, Tone } from '../ui/components';
 import { setupStyle, useTheme } from '../ui/theme';
 import { isEmpty } from 'lodash';
 
@@ -16,33 +18,57 @@ type Msg = { text: string; tone: Tone } | null;
 type Props = {
   config: AgentConfig;
   update: (patch: ConfigPatch) => void;
-  onDone: () => void;
-  /** Present when setup was already completed once, so the user can back out to the dashboard. */
-  onCancel?: () => void;
 }
 
-export const SetupWizard = ({ config, update, onDone, onCancel }: Props) => {
+const testPage = (printer: LocalPrinter) =>
+  ['בדיקת הדפסה', printer.name, printer.model ?? '', printer.ip, timeStamp()].filter(Boolean).join('\n');
+
+export const SetupWizard = ({ config, update }: Props) => {
   const theme = useTheme();
   const [msg, setMsg] = useState<Msg>(null);
   const [busy, setBusy] = useState('');
   const [connected, setConnected] = useState(false);
   const [found, setFound] = useState<LocalPrinter[]>([]);
+  const [scanned, setScanned] = useState(false);
   const [adding, setAdding] = useState<string | null>(null);
+  const [printing, setPrinting] = useState<string | null>(null);
+  // IP whose web page was opened; when the user comes back we ask whether they pinned it.
+  const pendingIp = useRef<string | null>(null);
+  const leftApp = useRef(false);
+
+  const markStaticIp = (ip: string, staticIp: StaticIpStatus) => {
+    update((prev) => ({
+      printers: prev.printers.map((p) => (p.ip === ip ? { ...p, staticIp } : p)),
+    }));
+    setFound((prev) => prev.map((p) => (p.ip === ip ? { ...p, staticIp } : p)));
+  };
+  const markStaticIpRef = useRef(markStaticIp);
+  markStaticIpRef.current = markStaticIp;
 
   useEffect(() => {
-    if (!onCancel) {
-      return;
-    }
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      onCancel();
-      return true;
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') {
+        leftApp.current = !!pendingIp.current;
+        return;
+      }
+      const ip = pendingIp.current;
+      if (!ip || !leftApp.current) {
+        return;
+      }
+      pendingIp.current = null;
+      leftApp.current = false;
+      Alert.alert('קיבעת את כתובת ה-IP בהצלחה?', ltr(ip), [
+        { text: 'לא', style: 'cancel', onPress: () => markStaticIpRef.current(ip, 'notPinned') },
+        { text: 'כן', onPress: () => markStaticIpRef.current(ip, 'pinned') },
+      ]);
     });
     return () => sub.remove();
-  }, [onCancel]);
+  }, []);
 
   const fail = (e: unknown) => setMsg({ text: (e as Error).message, tone: 'danger' });
 
   const scan = async () => {
+    setScanned(true);
     setBusy('0/254');
     setMsg(null);
     try {
@@ -63,7 +89,6 @@ export const SetupWizard = ({ config, update, onDone, onCancel }: Props) => {
     }
   };
 
-  // A successful connection goes straight into the printer search.
   const connect = async () => {
     setBusy('test');
     setMsg(null);
@@ -75,7 +100,7 @@ export const SetupWizard = ({ config, update, onDone, onCancel }: Props) => {
       return;
     }
     setConnected(true);
-    await scan();
+    setBusy('');
   };
 
   const isAdded = (ip: string) => config.printers.some((p) => p.ip === ip);
@@ -99,41 +124,63 @@ export const SetupWizard = ({ config, update, onDone, onCancel }: Props) => {
     }
   };
 
+  // Most network printers serve their own status/settings page over plain HTTP.
+  const openPrinterPage = (ip: string) => {
+    pendingIp.current = ip;
+    Linking.openURL(`http://${ip}`).catch((e) => {
+      pendingIp.current = null;
+      fail(e);
+    });
+  };
+
   const editConnection = () => {
     setConnected(false);
     setMsg(null);
   };
 
-  // Syncs again on the way out so renamed printers reach the server under their new names.
-  const finish = async () => {
-    setBusy('sync');
+  // A printer whose IP isn't pinned yet gets a test page; the user confirms it came out.
+  const testPrint = async (printer: LocalPrinter) => {
+    setPrinting(printer.ip);
     setMsg(null);
     try {
-      const backendPrinterMap = await syncPrinters(config);
-      update({ backendPrinterMap });
-      onDone();
+      await sendRaw(printer.ip, printer.port, buildTextReceipt(testPage(printer)));
     } catch (e) {
       fail(e);
+      return;
     } finally {
-      setBusy('');
+      setPrinting(null);
     }
+    Alert.alert('המדפסת הדפיסה בהצלחה?', printer.name, [
+      { text: 'לא', style: 'cancel', onPress: () => setMsg({ text: 'לא הודפס בדוק נייר מכסה וחשמל - ולחץ שוב', tone: 'danger' }) },
+      { text: 'כן', onPress: () => markStaticIpRef.current(printer.ip, 'pinned') },
+    ]);
   };
 
   const scanning = busy.includes('/');
   const newPrinters = found.filter((p) => !isAdded(p.ip));
   const muted = { color: theme.textMuted };
 
+  const renderRow = (p: LocalPrinter, i: number, trailing?: React.ReactNode) => (
+    <Pressable key={p.ip} onPress={() => testPrint(p)} disabled={p.staticIp !== 'unchecked' || !!printing || !!busy}
+      accessibilityRole="button" accessibilityLabel={`הדפסת בדיקה ל${p.name}`}
+      style={({ pressed }) => [setupStyle.resultRow, i > 0 && [setupStyle.divided, { borderTopColor: theme.border }],
+        pressed && setupStyle.dimmed]}>
+      <Text style={[setupStyle.resultText, { color: theme.text }]} numberOfLines={1}>
+        {p.name}
+        <Text style={muted}>{` · ${p.model ? ltr(p.model) : 'דגם לא זוהה'}`}</Text>
+      </Text>
+      <Text style={[setupStyle.resultIp, setupStyle.link, { color: theme.primary }]}
+        onPress={() => openPrinterPage(p.ip)} accessibilityRole="link">{ltr(p.ip)}</Text>
+      {printing === p.ip ? <ActivityIndicator size="small" color={theme.primary} /> : <StaticIpTag status={p.staticIp} />}
+      {trailing}
+    </Pressable>
+  );
+
   return (
     <View style={setupStyle.flex}>
       <View style={setupStyle.header}>
         <View style={setupStyle.spread}>
           <Text style={[setupStyle.title, { color: theme.text }]}>הגדרה</Text>
-          {connected && !isEmpty(config.printers) ? (
-            <Button label={'סיום'} variant="ghost" onPress={finish} loading={busy === 'sync'}
-              disabled={!!busy || !!adding} style={setupStyle.compactBtn} />
-          ) : (
-            onCancel && <Button label={'סגירה'} variant="ghost" onPress={onCancel} style={setupStyle.compactBtn} />
-          )}
         </View>
       </View>
 
@@ -174,45 +221,29 @@ export const SetupWizard = ({ config, update, onDone, onCancel }: Props) => {
           <>
             <SectionTitle title={'המדפסות שלי'} right={<Text style={muted}>{config.printers.length}</Text>} />
             <Card style={setupStyle.resultList}>
-              {config.printers.map((p, i) => (
-                <View key={p.ip} style={[setupStyle.resultRow, i > 0 && [setupStyle.divided, { borderTopColor: theme.border }]]}>
-                  <Text style={[setupStyle.resultText, { color: theme.text }]} numberOfLines={1}>
-                    {p.name}
-                    <Text style={muted}>{` · ${p.model ? ltr(p.model) : 'דגם לא זוהה'}`}</Text>
-                  </Text>
-                  <Text style={[setupStyle.resultIp, muted]}>{ltr(p.ip)}</Text>
-                </View>
-              ))}
+              {config.printers.map((p, i) => renderRow(p, i))}
             </Card>
           </>
         )}
 
         {connected && (
           <>
-            <SectionTitle title={'מדפסות חדשות'} right={
+            <SectionTitle title={'מדפסות חדשות'} right={scanned && (
               <Button label={scanning ? `סורק ${ltr(busy)}` : 'סריקה חוזרת'} variant="ghost" onPress={scan}
                 loading={scanning} disabled={!!busy && !scanning} style={setupStyle.compactBtn} />
-            } />
+            )} />
+            {!scanned && <Button label={'חיפוש מדפסות'} variant="secondary" onPress={scan} disabled={!!busy || !!printing} />}
             {!isEmpty(newPrinters) && (
               <Card style={setupStyle.resultList}>
-                {newPrinters.map((p, i) => (
-                  <View key={p.ip} style={[setupStyle.resultRow, i > 0 && [setupStyle.divided, { borderTopColor: theme.border }]]}>
-                    <Text style={[setupStyle.resultText, { color: theme.text }]} numberOfLines={1}>
-                      {p.name}
-                      <Text style={muted}>{` · ${p.model ? ltr(p.model) : 'דגם לא זוהה'}`}</Text>
-                    </Text>
-                    <Text style={[setupStyle.resultIp, muted]}>{ltr(p.ip)}</Text>
-                    {adding === p.ip ? (
-                      <View style={setupStyle.addBtn}><ActivityIndicator size="small" color={theme.primary} /></View>
-                    ) : (
-                      <Pressable onPress={() => addPrinter(p)} disabled={!!adding || !!busy} hitSlop={8} accessibilityRole="button"
-                        accessibilityLabel={`הוספת ${p.name}`}
-                        style={({ pressed }) => [setupStyle.addBtn, { backgroundColor: theme.primarySoft }, pressed && setupStyle.dimmed]}>
-                        <Text style={[setupStyle.addIcon, { color: theme.primary }]}>+</Text>
-                      </Pressable>
-                    )}
-                  </View>
-                ))}
+                {newPrinters.map((p, i) => renderRow(p, i, adding === p.ip ? (
+                  <View style={setupStyle.addBtn}><ActivityIndicator size="small" color={theme.primary} /></View>
+                ) : (
+                  <Pressable onPress={() => addPrinter(p)} disabled={!!adding || !!busy} hitSlop={8} accessibilityRole="button"
+                    accessibilityLabel={`הוספת ${p.name}`}
+                    style={({ pressed }) => [setupStyle.addBtn, { backgroundColor: theme.primarySoft }, pressed && setupStyle.dimmed]}>
+                    <Text style={[setupStyle.addIcon, { color: theme.primary }]}>+</Text>
+                  </Pressable>
+                )))}
               </Card>
             )}
             {isEmpty(newPrinters) && scanning && <Text style={[setupStyle.empty, muted]}>{'מחפש מדפסות ברשת…'}</Text>}

@@ -98,21 +98,3 @@ export const setupStyle = StyleSheet.create({
   addBtn: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
   addIcon: { fontSize: 22, fontWeight: '600', lineHeight: 26 },
 });
-
-export const dashboardStyle = StyleSheet.create({
-  body: { padding: 20, gap: 16 },
-  spread: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  shrink: { flexShrink: 1 },
-  title: { fontSize: 24, fontWeight: '700' },
-  small: { fontSize: 13 },
-  body14: { fontSize: 14 },
-  compactBtn: { paddingVertical: 6 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  headline: { fontSize: 20, fontWeight: '700' },
-  stats: { flexDirection: 'row', gap: 12 },
-  stat: { flex: 1, borderRadius: radius.md, padding: 12 },
-  statValue: { fontSize: 22, fontWeight: '700' },
-  printerName: { fontSize: 15, fontWeight: '500' },
-  divided: { paddingTop: 12, borderTopWidth: 1 },
-  logLine: { fontSize: 13, fontFamily: 'monospace' },
-});

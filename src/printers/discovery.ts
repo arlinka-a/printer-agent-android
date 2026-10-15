@@ -35,7 +35,7 @@ export async function discoverPrinters(
           name: `מדפסת-${batch[j].split('.')[3]}`,
           ip: batch[j],
           port: RAW_PRINT_PORT,
-          staticIpConfirmed: false,
+          staticIp: 'unchecked',
         });
       }
     });

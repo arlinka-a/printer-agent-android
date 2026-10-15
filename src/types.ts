@@ -35,9 +35,12 @@ export type LocalPrinter = {
   port: number;
   /** Manufacturer and model as the printer reports them (ESC/POS GS I); null if it didn't answer. */
   model?: string | null;
-  /** Set once the user pins the printer to a static IP and confirms it answers there. */
-  staticIpConfirmed: boolean;
+  /** Whether the user says they pinned this IP in the printer's own settings page. */
+  staticIp: StaticIpStatus;
 }
+
+/** unchecked: not asked yet; notPinned: user answered "no"; pinned: user answered "yes". */
+export type StaticIpStatus = 'unchecked' | 'notPinned' | 'pinned';
 
 export type AgentConfig = {
   baseUrl: string;

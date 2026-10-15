@@ -9,6 +9,7 @@ import {
   View,
   ViewStyle,
 } from 'react-native';
+import { StaticIpStatus } from '../types';
 import { s, Theme, useTheme } from './theme';
 
 export type Tone = 'success' | 'danger' | 'warn' | 'neutral' | 'info';
@@ -115,6 +116,14 @@ export const Pill = ({ label, tone = 'neutral' }: PillProps) => {
     </View>
   );
 }
+
+const staticIpTags: Record<StaticIpStatus, PillProps> = {
+  unchecked: { label: 'לא קבוע', tone: 'neutral' },
+  notPinned: { label: 'לא קבוע', tone: 'danger' },
+  pinned: { label: 'קבוע', tone: 'success' },
+};
+
+export const StaticIpTag = ({ status }: { status: StaticIpStatus }) => <Pill {...staticIpTags[status]} />;
 
 type NoticeProps = { text: string; tone?: Tone }
 export const Notice = ({ text, tone = 'info' }: NoticeProps) => {

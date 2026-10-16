@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, AppState, Linking, Pressable, ScrollView, Text, ToastAndroid, View } from 'react-native';
 import { syncPrinters } from '../agent/agent';
-import { api, normalizeBaseUrl } from '../api/client';
+import { api, ApiError, normalizeBaseUrl } from '../api/client';
 import { isConfigUsable } from '../config/storage';
+import { autoStart } from '../native/autoStart';
 import { discoverPrinters } from '../printers/discovery';
 import { buildTextReceipt } from '../printers/escpos';
 import { sendRaw } from '../printers/transport';
@@ -20,6 +21,10 @@ type Props = {
   update: (patch: ConfigPatch) => void;
 }
 
+// Right after a phone restart Wi-Fi may not be up yet, so the automatic connect keeps retrying this long.
+const STARTUP_NETWORK_WAIT_MS = 60_000;
+const STARTUP_RETRY_MS = 3000;
+
 const testPage = (printer: LocalPrinter) =>
   ['בדיקת הדפסה', printer.name, printer.model ?? '', printer.ip, timeStamp()].filter(Boolean).join('\n');
 
@@ -32,6 +37,8 @@ export const SetupWizard = ({ config, update }: Props) => {
   const [scanned, setScanned] = useState(false);
   const [adding, setAdding] = useState<string | null>(null);
   const [printing, setPrinting] = useState<string | null>(null);
+  // Assume granted until checked, so the prompt doesn't flash on every launch.
+  const [autoStartEnabled, setAutoStartEnabled] = useState(true);
   // IP whose web page was opened; when the user comes back we ask whether they pinned it.
   const pendingIp = useRef<string | null>(null);
   const leftApp = useRef(false);
@@ -65,6 +72,22 @@ export const SetupWizard = ({ config, update }: Props) => {
     return () => sub.remove();
   }, []);
 
+  // Re-checked on every return to the app, since the permission is granted in system settings.
+  useEffect(() => {
+    const check = () => autoStart.isEnabled().then(setAutoStartEnabled).catch(() => {});
+    check();
+    const sub = AppState.addEventListener('change', (state) => state === 'active' && check());
+    return () => sub.remove();
+  }, []);
+
+  // A saved connection reconnects on launch, so the app reopens on the printers screen.
+  useEffect(() => {
+    if (isConfigUsable(config)) {
+      connect(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const fail = (e: unknown) => setMsg({ text: (e as Error).message, tone: 'danger' });
 
   const scan = async () => {
@@ -89,15 +112,24 @@ export const SetupWizard = ({ config, update }: Props) => {
     }
   };
 
-  const connect = async () => {
+  const connect = async (waitForNetwork = false) => {
     setBusy('test');
     setMsg(null);
-    try {
-      await api.activePrinters(config);
-    } catch (e) {
-      fail(e);
-      setBusy('');
-      return;
+    const deadline = Date.now() + STARTUP_NETWORK_WAIT_MS;
+    for (;;) {
+      try {
+        await api.activePrinters(config);
+        break;
+      } catch (e) {
+        // Status 0 means the server wasn't reachable at all; anything else (bad key) won't fix itself.
+        if (waitForNetwork && e instanceof ApiError && e.status === 0 && Date.now() < deadline) {
+          await new Promise<void>((resolve) => setTimeout(resolve, STARTUP_RETRY_MS));
+          continue;
+        }
+        fail(e);
+        setBusy('');
+        return;
+      }
     }
     setConnected(true);
     setBusy('');
@@ -216,8 +248,17 @@ export const SetupWizard = ({ config, update }: Props) => {
             <Field label={'מפתח זיהוי'} value={config.agentToken} onChangeText={(v) => update({ agentToken: v })}
               placeholder="pa_..." secureTextEntry ltr />
             <Field label={'שם העסק'} value={config.tenantId} onChangeText={(v) => update({ tenantId: v })} />
-            <Button label={busy === 'test' ? 'מתחבר למערכת' : 'התחבר'} variant="secondary" onPress={connect}
+            <Button label={busy === 'test' ? 'מתחבר למערכת' : 'התחבר'} variant="secondary" onPress={() => connect()}
               loading={busy === 'test'} disabled={!isConfigUsable(config)} />
+          </Card>
+        )}
+
+        {connected && !autoStartEnabled && (
+          <Card style={{ backgroundColor: theme.warnSoft, borderColor: theme.warn }}>
+            <Text style={{ color: theme.text }}>
+              {'כדי שהאפליקציה תיפתח מעצמה אחרי הפעלה מחדש של הטלפון, אשרו לה "הצגה מעל אפליקציות אחרות".'}
+            </Text>
+            <Button label={'אישור פתיחה אוטומטית'} variant="secondary" onPress={autoStart.openSettings} />
           </Card>
         )}
 

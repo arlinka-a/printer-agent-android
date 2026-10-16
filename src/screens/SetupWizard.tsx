@@ -183,6 +183,7 @@ export const SetupWizard = ({ config, update }: Props) => {
     } finally {
       setPrinting(null);
     }
+    ToastAndroid.show('דף בדיקה נשלח', ToastAndroid.SHORT);
     if (printer.staticIp === 'pinned') {
       return;
     }

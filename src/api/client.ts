@@ -54,7 +54,7 @@ async function request<T>(
   if (!response.ok) {
     const message =
       response.status === 401 || response.status === 403
-        ? 'מפתח הסוכן שגוי או שבוטל.'
+        ? 'החיבור נכשל - כתובת המערכת או מפתח הזיהוי לא נכונים'
         : `השרת החזיר שגיאה (${ltr(response.status)})${data?.message ? `: ${data?.message}` : ''}`;
     throw new ApiError(message, response.status);
   }

@@ -125,8 +125,9 @@ export const SetupWizard = ({ config, update }: Props) => {
   };
 
   // Most network printers serve their own status/settings page over plain HTTP.
-  const openPrinterPage = (ip: string) => {
-    pendingIp.current = ip;
+  // An IP already tagged as pinned opens the page without asking again on return.
+  const openPrinterPage = ({ ip, staticIp }: LocalPrinter) => {
+    pendingIp.current = staticIp === 'pinned' ? null : ip;
     Linking.openURL(`http://${ip}`).catch((e) => {
       pendingIp.current = null;
       fail(e);
@@ -138,7 +139,7 @@ export const SetupWizard = ({ config, update }: Props) => {
     setMsg(null);
   };
 
-  // A printer whose IP isn't pinned yet gets a test page; the user confirms it came out.
+  // Tapping a printer's row prints a test page; unless its IP is already pinned, the user confirms it came out.
   const testPrint = async (printer: LocalPrinter) => {
     setPrinting(printer.ip);
     setMsg(null);
@@ -149,6 +150,9 @@ export const SetupWizard = ({ config, update }: Props) => {
       return;
     } finally {
       setPrinting(null);
+    }
+    if (printer.staticIp === 'pinned') {
+      return;
     }
     Alert.alert('המדפסת הדפיסה בהצלחה?', printer.name, [
       { text: 'לא', style: 'cancel', onPress: () => setMsg({ text: 'לא הודפס בדוק נייר מכסה וחשמל - ולחץ שוב', tone: 'danger' }) },
@@ -161,7 +165,7 @@ export const SetupWizard = ({ config, update }: Props) => {
   const muted = { color: theme.textMuted };
 
   const renderRow = (p: LocalPrinter, i: number, trailing?: React.ReactNode) => (
-    <Pressable key={p.ip} onPress={() => testPrint(p)} disabled={p.staticIp !== 'unchecked' || !!printing || !!busy}
+    <Pressable key={p.ip} onPress={() => testPrint(p)} disabled={!!printing || !!busy}
       accessibilityRole="button" accessibilityLabel={`הדפסת בדיקה ל${p.name}`}
       style={({ pressed }) => [setupStyle.resultRow, i > 0 && [setupStyle.divided, { borderTopColor: theme.border }],
         pressed && setupStyle.dimmed]}>
@@ -170,7 +174,7 @@ export const SetupWizard = ({ config, update }: Props) => {
         <Text style={muted}>{` · ${p.model ? ltr(p.model) : 'דגם לא זוהה'}`}</Text>
       </Text>
       <Text style={[setupStyle.resultIp, setupStyle.link, { color: theme.primary }]}
-        onPress={() => openPrinterPage(p.ip)} accessibilityRole="link">{ltr(p.ip)}</Text>
+        onPress={() => openPrinterPage(p)} accessibilityRole="link">{ltr(p.ip)}</Text>
       {printing === p.ip ? <ActivityIndicator size="small" color={theme.primary} /> : <StaticIpTag status={p.staticIp} />}
       {trailing}
     </Pressable>
